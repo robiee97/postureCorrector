@@ -1,0 +1,104 @@
+#include <ESP8266WiFi.h>
+#include <FirebaseArduino.h>
+#define FIREBASE_HOST "YourURL.firebaseio.com" // FB url
+#define FIREBASE_AUTH "YourFBToken"  // FB token
+#define WIFI_SSID "YourSSID" // ssid 
+#define WIFI_PASSWORD "YourPASSWORD" // pswrd
+const int analogIn = A0; // fv,hv
+const int buzzer = 15; //D8
+int count = 1;
+int flexVcc = 5; //D1
+int heartVcc = 4; //D2
+int bestValue = 370;//initial reference value
+int flexValue;// initial fv
+int heartValue;//initial hv
+void setup() {
+  /*  wifi starts*/
+  Serial.begin(9600);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+  Serial.print("connected: ");
+  Serial.println(WiFi.localIP());
+  // firebase setting up
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  //setting outputs,inputs
+  pinMode(buzzer, OUTPUT);
+  pinMode(flexVcc, OUTPUT);
+  pinMode(heartVcc, OUTPUT);
+  pinMode(analogIn, INPUT);
+}
+
+void loop() {
+  /*
+    ======================================================
+    here we are having our flex functionality
+    how our best value is compared with flex value
+    and generate output to the vibration motor and buzzer
+    ======================================================
+  */
+  String screenvalue = Firebase.getString("screen");   //getting screen data(0 || 1)
+  int i = screenvalue.toInt(); // typecasting string into int
+  //if 1 then perform posture
+  if (i==1) {
+    digitalWrite(flexVcc, HIGH);
+    digitalWrite(heartVcc, LOW);
+    flexValue = analogRead(analogIn);
+ Serial.println(bestValue);
+    Serial.print("sensor: ");    Serial.println(flexValue);
+  Serial.println("counts");
+   Serial.println(count);
+    if (flexValue > bestValue)
+    {
+      count++;  /*chechking every bending case, INCREASE if bend on pivot point*/
+      if (count % 5 != 0)
+      { //this statement is not 5th multiple
+        noTone(buzzer);
+        delay(100);
+      }
+      else
+        tone(buzzer, 100); /*this condition gives buzzer OUTPUT with 100Hz every 5 bending counts with a delay of 1sec*/
+      delay(500);
+    }
+    else
+      //cond for good posture//
+      noTone(buzzer);
+    delay(100);
+    // pushing || setting the values
+//    Firebase.setInt("flexValue", flexValue);    //sending int type fv
+    if (Firebase.failed()) {
+      Serial.print("setting /number failed1:");
+      Serial.println(Firebase.error());
+      return;
+    }
+    delay(100);
+    Firebase.setInt("bestValue", bestValue);    //sending int type bv
+    if (Firebase.failed()) {
+      Serial.print("setting /number failed2:");
+      Serial.println(Firebase.error());
+      return;
+    }
+    delay(100);
+    // calibration part
+    String n = Firebase.getString("temp"); //gettin temp as string and typecasted as int
+    int temp = n.toInt();
+    bestValue = temp;
+  }
+  //if screen is 0 then perform heart mechanism
+  else {
+    digitalWrite(flexVcc, LOW);
+    digitalWrite(heartVcc, HIGH);
+  heartValue = analogRead(analogIn);
+   Serial.println(heartValue);
+      Firebase.setInt("bpm", heartValue/5);  //pushing int type bv
+      if (Firebase.failed()) {
+      Serial.print("setting /number failed3:");
+      Serial.println(Firebaseerror());
+      return;
+    }
+    delay(100);
+  }
